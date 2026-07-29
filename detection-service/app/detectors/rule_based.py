@@ -1,6 +1,3 @@
-import numpy as np
-
-
 class RuleBasedDetector:
 
     def __init__(self, z_threshold: float = 3.0, velocity_multiplier: float = 5.0):

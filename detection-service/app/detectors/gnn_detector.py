@@ -43,7 +43,6 @@ class GNNDetector:
     def _aggregate_neighbors(self, node_features: dict, graph_data: dict) -> np.ndarray:
         """Aggregate features from 1-hop neighbors."""
         node_id = node_features.get("agent_id", "")
-        nodes = graph_data.get("nodes", [])
         edges = graph_data.get("edges", [])
 
         neighbor_features = []

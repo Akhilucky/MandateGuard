@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException
 import httpx
 from uuid import UUID
 
-from app.models import DetectionResult, AgentFeatures, TrainingStatus, ExplanationItem
+from app.models import DetectionResult, TrainingStatus, ExplanationItem
 from app.detectors.rule_based import RuleBasedDetector
 from app.detectors.ml_detector import MLDetector
 from app.detectors.gnn_detector import GNNDetector
