@@ -74,9 +74,9 @@ class MLDetector:
         self._save_model()
         return len(feature_list)
 
-    def detect(self, features: dict) -> tuple[float, list[str]]:
+    def detect(self, features: dict) -> tuple[float, list[str], list[dict]]:
         if not self.trained:
-            return 0.0, ["model_not_trained"]
+            return 0.0, ["model_not_trained"], []
 
         vec = self._features_to_vector(features)
         vec_scaled = self.scaler.transform(vec)
@@ -88,7 +88,24 @@ class MLDetector:
         is_anomaly = prediction == -1
 
         signals = []
+        explanations = []
         if is_anomaly:
             signals.append("ml_isolation_forest_anomaly")
+            feature_names = [
+                "tx_count", "tx_amount_mean", "tx_amount_std",
+                "unique_counterparties", "in_degree", "out_degree",
+                "in_out_ratio", "clustering_coefficient",
+                "mandate_reuse_count", "time_since_creation_hours"
+            ]
+            vec_values = vec[0]
+            for i, name in enumerate(feature_names):
+                val = float(vec_values[i])
+                if abs(val) > 1.0:
+                    explanations.append({
+                        "factor": name,
+                        "weight": round(abs(val) / max(abs(float(v)) for v in vec_values) + 1e-8, 4),
+                        "description": f"Isolation Forest flagged {name}={val:.2f} as anomalous",
+                        "evidence": {"feature": name, "value": val}
+                    })
 
-        return risk_score, signals
+        return risk_score, signals, explanations

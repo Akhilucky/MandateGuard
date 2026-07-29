@@ -2,6 +2,7 @@ from pydantic import BaseModel
 from uuid import UUID
 from datetime import datetime
 
+
 class TransactionRecord(BaseModel):
     tx_id: UUID
     mandate_id: UUID
@@ -11,6 +12,7 @@ class TransactionRecord(BaseModel):
     currency: str
     timestamp: datetime
     is_fraud_label: bool = False
+
 
 class AgentFeatures(BaseModel):
     agent_id: UUID
@@ -24,6 +26,7 @@ class AgentFeatures(BaseModel):
     clustering_coefficient: float
     mandate_reuse_count: int
     time_since_creation_hours: float
+
 
 class WindowFeatures(BaseModel):
     window_start: datetime

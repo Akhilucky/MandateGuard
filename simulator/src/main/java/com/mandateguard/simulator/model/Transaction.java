@@ -12,18 +12,16 @@ public record Transaction(
     BigDecimal amount,
     String currency,
     Instant timestamp,
-    boolean isFraudLabel
+    boolean isFraudLabel,
+    String fraudType
 ) {
     public static Transaction create(UUID mandateId, UUID from, UUID to, BigDecimal amount, boolean isFraud) {
+        return create(mandateId, from, to, amount, isFraud, "normal");
+    }
+
+    public static Transaction create(UUID mandateId, UUID from, UUID to, BigDecimal amount, boolean isFraud, String fraudType) {
         return new Transaction(
-            UUID.randomUUID(),
-            mandateId,
-            from,
-            to,
-            amount,
-            "USDC",
-            Instant.now(),
-            isFraud
+            UUID.randomUUID(), mandateId, from, to, amount, "USDC", Instant.now(), isFraud, fraudType
         );
     }
 }

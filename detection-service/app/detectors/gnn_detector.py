@@ -123,9 +123,9 @@ class GNNDetector:
         self._save_model()
         return len(feature_list)
 
-    def detect(self, features: dict, graph_data: dict = None) -> tuple[float, list[str]]:
+    def detect(self, features: dict, graph_data: dict = None) -> tuple[float, list[str], list[dict]]:
         if not self.trained:
-            return 0.0, ["gnn_model_not_trained"]
+            return 0.0, ["gnn_model_not_trained"], []
 
         node_feat = self._aggregate_neighbors(features, graph_data or {"nodes": [], "edges": []})
         mean = np.zeros(self.feature_dim)
@@ -138,7 +138,24 @@ class GNNDetector:
 
         is_anomaly = risk_score > 0.5
         signals = []
+        explanations = []
         if is_anomaly:
             signals.append("gnn_structural_anomaly")
+            feature_names = [
+                "tx_count", "tx_amount_mean", "tx_amount_std",
+                "unique_counterparties", "in_degree", "out_degree",
+                "in_out_ratio", "clustering_coefficient",
+                "mandate_reuse_count", "time_since_creation_hours",
+                "neighbor_weight", "neighbor_count", "neighbor_in_degree", "neighbor_out_degree"
+            ]
+            for i, name in enumerate(feature_names):
+                val = float(node_feat[i])
+                if abs(val) > 1.0:
+                    explanations.append({
+                        "factor": name,
+                        "weight": round(abs(val) / max(abs(float(v)) for v in node_feat) + 1e-8, 4),
+                        "description": f"GNN flagged {name}={val:.2f} as structurally anomalous",
+                        "evidence": {"feature": name, "value": val}
+                    })
 
-        return risk_score, signals
+        return risk_score, signals, explanations

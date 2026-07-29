@@ -13,11 +13,13 @@ public record Mandate(
     String signature
 ) {
     public static Mandate create(UUID issuerAgentId) {
+        return create(issuerAgentId, pickScope());
+    }
+
+    public static Mandate create(UUID issuerAgentId, String scope) {
         Instant now = Instant.now();
         return new Mandate(
-            UUID.randomUUID(),
-            issuerAgentId,
-            pickScope(),
+            UUID.randomUUID(), issuerAgentId, scope,
             BigDecimal.valueOf(0.1 + Math.random() * 100.0),
             now.plusSeconds(3600 + (long)(Math.random() * 86400)),
             "mock-sig-" + UUID.randomUUID().toString().substring(0, 8)

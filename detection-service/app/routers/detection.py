@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException
 import httpx
 from uuid import UUID
 
-from app.models import DetectionResult, AgentFeatures, TrainingStatus
+from app.models import DetectionResult, AgentFeatures, TrainingStatus, ExplanationItem
 from app.detectors.rule_based import RuleBasedDetector
 from app.detectors.ml_detector import MLDetector
 from app.detectors.gnn_detector import GNNDetector
@@ -28,8 +28,8 @@ async def get_agent_risk(agent_id: UUID):
     except httpx.ConnectError:
         features = _default_features(str(agent_id))
 
-    rule_score, rule_signals = rule_detector.detect(features)
-    ml_score, ml_signals = ml_detector.detect(features)
+    rule_score, rule_signals, rule_explanations = rule_detector.detect(features)
+    ml_score, ml_signals, ml_explanations = ml_detector.detect(features)
 
     graph_data = None
     try:
@@ -40,7 +40,7 @@ async def get_agent_risk(agent_id: UUID):
     except httpx.ConnectError:
         pass
 
-    gnn_score, gnn_signals = gnn_detector.detect(features, graph_data)
+    gnn_score, gnn_signals, gnn_explanations = gnn_detector.detect(features, graph_data)
 
     scores = [rule_score]
     weights = [0.4]
@@ -56,6 +56,17 @@ async def get_agent_risk(agent_id: UUID):
 
     all_signals = list(set(rule_signals + ml_signals + gnn_signals))
 
+    explanations = [ExplanationItem(**e) for e in rule_explanations + ml_explanations + gnn_explanations]
+
+    if combined_score > 0.8:
+        risk_level = "CRITICAL"
+    elif combined_score > 0.5:
+        risk_level = "HIGH"
+    elif combined_score > 0.3:
+        risk_level = "MEDIUM"
+    else:
+        risk_level = "LOW"
+
     methods = ["rule"]
     if ml_detector.trained:
         methods.append("ml")
@@ -68,6 +79,8 @@ async def get_agent_risk(agent_id: UUID):
         is_anomaly=combined_score > 0.5,
         signals=all_signals,
         method="+".join(methods),
+        risk_level=risk_level,
+        explanations=explanations,
     )
 
 

@@ -10,6 +10,7 @@ public class SimulatorConfig {
     private int timeWindowHours = 24;
     private double fraudRate = 0.02;
     private double avgTransactionsPerHour = 5;
+    private String defaultScenario = "C";
 
     public int getPopulationSize() { return populationSize; }
     public void setPopulationSize(int populationSize) { this.populationSize = populationSize; }
@@ -19,4 +20,6 @@ public class SimulatorConfig {
     public void setFraudRate(double fraudRate) { this.fraudRate = fraudRate; }
     public double getAvgTransactionsPerHour() { return avgTransactionsPerHour; }
     public void setAvgTransactionsPerHour(double avgTransactionsPerHour) { this.avgTransactionsPerHour = avgTransactionsPerHour; }
+    public String getDefaultScenario() { return defaultScenario; }
+    public void setDefaultScenario(String defaultScenario) { this.defaultScenario = defaultScenario; }
 }

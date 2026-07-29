@@ -1,7 +1,6 @@
 from fastapi import APIRouter, HTTPException
 import httpx
 import networkx as nx
-import pandas as pd
 import numpy as np
 from uuid import UUID
 from datetime import datetime, timedelta

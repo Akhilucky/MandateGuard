@@ -7,8 +7,10 @@ import java.util.UUID;
 public record Agent(
     UUID agentId,
     AgentType type,
+    AgentProfile profile,
     Instant createdAt,
     BigDecimal reputationScore,
+    double reputationDelta,
     BigDecimal spendBaseline
 ) {
     public enum AgentType {
@@ -16,12 +18,18 @@ public record Agent(
     }
 
     public static Agent create(AgentType type) {
+        return create(type, AgentProfile.random(new java.util.Random()));
+    }
+
+    public static Agent create(AgentType type, AgentProfile profile) {
         return new Agent(
             UUID.randomUUID(),
             type,
+            profile,
             Instant.now(),
             BigDecimal.valueOf(0.5 + Math.random() * 0.5),
-            BigDecimal.valueOf(0.01 + Math.random() * 5.0)
+            0.0,
+            BigDecimal.valueOf(profile.getAvgAmount() * (0.5 + Math.random()))
         );
     }
 }
