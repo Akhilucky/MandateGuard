@@ -1,8 +1,5 @@
 import httpx
-import json
-import time
 import sys
-from uuid import UUID
 from collections import defaultdict
 
 SIMULATOR_URL = "http://localhost:8081/simulate"
@@ -78,14 +75,14 @@ def run_full_evaluation(population_size: int = None) -> dict:
     fraud_count = sum(1 for tx in txs if tx.get("isFraudLabel") or tx.get("fraudLabel"))
     print(f"  Total: {total}")
     print(f"  Fraud (ground truth): {fraud_count}")
-    print(f"  Fraud rate: {fraud_count/total*100:.2f}%" if total > 0 else "  No transactions")
+    print(f"  Fraud rate: {fraud_count / total * 100:.2f}%" if total > 0 else "  No transactions")
 
     agent_archetypes = build_archetype_map(txs)
     archetype_counts = defaultdict(int)
     for archetypes in agent_archetypes.values():
         for a in archetypes:
             archetype_counts[a] += 1
-    print(f"  Archetype distribution:")
+    print("  Archetype distribution:")
     for arch, count in sorted(archetype_counts.items()):
         print(f"    {arch}: {count} agents")
 
