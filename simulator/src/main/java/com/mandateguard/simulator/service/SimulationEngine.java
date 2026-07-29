@@ -23,6 +23,7 @@ public class SimulationEngine {
     private final List<Agent> agents = new ArrayList<>();
     private final Queue<Transaction> transactionBuffer = new ConcurrentLinkedQueue<>();
     private final Map<UUID, List<Mandate>> agentMandates = new HashMap<>();
+    private final Random random = new Random(42);
 
     private final MandateReplayFraud mandateReplayFraud;
     private final MicropaymentDosFraud micropaymentDosFraud;
@@ -48,6 +49,10 @@ public class SimulationEngine {
     public Map<String, Object> runSimulation() {
         long startTime = System.currentTimeMillis();
 
+        transactionBuffer.clear();
+        agents.clear();
+        agentMandates.clear();
+
         generatePopulation();
         generateNormalTraffic();
         injectFraud();
@@ -64,13 +69,10 @@ public class SimulationEngine {
     }
 
     private void generatePopulation() {
-        agents.clear();
-        agentMandates.clear();
         int fraudCount = (int)(config.getPopulationSize() * config.getFraudRate());
 
         for (int i = 0; i < config.getPopulationSize() - fraudCount; i++) {
-            Agent agent = Agent.create(AgentType.NORMAL);
-            agents.add(agent);
+            agents.add(Agent.create(AgentType.NORMAL));
         }
 
         AgentType[] fraudTypes = {
@@ -81,12 +83,12 @@ public class SimulationEngine {
             AgentType type = fraudTypes[i % fraudTypes.length];
             agents.add(Agent.create(type));
         }
-        Collections.shuffle(agents);
+        Collections.shuffle(agents, random);
     }
 
     private void generateNormalTraffic() {
         Instant windowStart = Instant.now().minus(config.getTimeWindowHours(), ChronoUnit.HOURS);
-        Instant windowEnd = Instant.now();
+        long windowSeconds = ChronoUnit.HOURS.getDuration(config.getTimeWindowHours()).getSeconds();
 
         for (Agent agent : agents) {
             if (agent.type() != AgentType.NORMAL) continue;
@@ -94,20 +96,68 @@ public class SimulationEngine {
             Mandate mandate = Mandate.create(agent.agentId());
             agentMandates.computeIfAbsent(agent.agentId(), k -> new ArrayList<>()).add(mandate);
 
-            int txCount = (int)(config.getAvgTransactionsPerHour() * config.getTimeWindowHours() * (0.5 + Math.random()));
+            double activityLevel = samplePowerLaw(0.5, 3.0);
+            int txCount = Math.max(1, (int)(config.getAvgTransactionsPerHour() * config.getTimeWindowHours() * activityLevel));
+
             for (int i = 0; i < txCount; i++) {
-                Agent recipient = pickRandomAgentExcluding(agent.agentId());
+                Agent recipient = pickWeightedRecipient(agent.agentId());
                 if (recipient == null) continue;
 
-                BigDecimal amount = BigDecimal.valueOf(0.01 + Math.random() * agent.spendBaseline().doubleValue());
-                Instant txTime = windowStart.plusSeconds((long)(Math.random() * ChronoUnit.HOURS.getDuration(config.getTimeWindowHours()).getSeconds()));
+                double amount = sampleLogNormal(agent.spendBaseline().doubleValue());
+                Instant txTime = sampleTimeWithDiurnalPattern(windowStart, windowSeconds);
 
                 transactionBuffer.add(Transaction.create(
                     mandate.mandateId(), agent.agentId(), recipient.agentId(),
-                    amount.setScale(6, java.math.RoundingMode.HALF_UP), false
+                    BigDecimal.valueOf(amount).setScale(6, java.math.RoundingMode.HALF_UP), false
                 ));
             }
         }
+    }
+
+    private double samplePowerLaw(double min, double max) {
+        double alpha = 2.5;
+        double u = random.nextDouble();
+        double scaled = min * Math.pow(u, -1.0 / (alpha - 1.0));
+        return Math.min(scaled, max);
+    }
+
+    private double sampleLogNormal(double baseline) {
+        double mu = Math.log(Math.max(baseline, 0.01));
+        double sigma = 0.8;
+        double sample = random.nextGaussian() * sigma + mu;
+        return Math.max(0.001, Math.exp(sample));
+    }
+
+    private Instant sampleTimeWithDiurnalPattern(Instant windowStart, long windowSeconds) {
+        double hourOfDay = (random.nextDouble() * 24);
+        double activityWeight = 0.3 + 0.7 * Math.exp(-Math.pow(hourOfDay - 14, 2) / 50.0);
+        if (random.nextDouble() > activityWeight) {
+            hourOfDay = random.nextDouble() * 24;
+        }
+        long offsetSeconds = (long)(hourOfDay * 3600) % windowSeconds;
+        return windowStart.plusSeconds(offsetSeconds);
+    }
+
+    private Agent pickWeightedRecipient(UUID excludeId) {
+        List<Agent> candidates = agents.stream()
+            .filter(a -> !a.agentId().equals(excludeId))
+            .toList();
+        if (candidates.isEmpty()) return null;
+
+        double[] weights = new double[candidates.size()];
+        double totalWeight = 0;
+        for (int i = 0; i < candidates.size(); i++) {
+            weights[i] = Math.pow(candidates.get(i).reputationScore().doubleValue(), 2.0);
+            totalWeight += weights[i];
+        }
+
+        double r = random.nextDouble() * totalWeight;
+        double cumulative = 0;
+        for (int i = 0; i < candidates.size(); i++) {
+            cumulative += weights[i];
+            if (r <= cumulative) return candidates.get(i);
+        }
+        return candidates.get(candidates.size() - 1);
     }
 
     private void injectFraud() {
@@ -132,10 +182,5 @@ public class SimulationEngine {
                 tx.amount(), tx.currency(), tx.timestamp(), tx.isFraudLabel()
             );
         }
-    }
-
-    private Agent pickRandomAgentExcluding(UUID excludeId) {
-        List<Agent> candidates = agents.stream().filter(a -> !a.agentId().equals(excludeId)).toList();
-        return candidates.isEmpty() ? null : candidates.get((int)(Math.random() * candidates.size()));
     }
 }

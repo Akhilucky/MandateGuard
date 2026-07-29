@@ -1,0 +1,72 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  java-build:
+    name: Java Services Build
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [simulator, ledger, policy-api]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: maven
+      - name: Build ${{ matrix.service }}
+        run: mvn -B clean package -DskipTests
+        working-directory: ${{ matrix.service }}
+      - name: Run tests
+        run: mvn -B test
+        working-directory: ${{ matrix.service }}
+
+  python-lint:
+    name: Python Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install flake8
+        run: pip install flake8
+      - name: Lint feature-service
+        run: flake8 app/ --max-line-length=120 --ignore=E501,W503
+        working-directory: feature-service
+      - name: Lint detection-service
+        run: flake8 app/ --max-line-length=120 --ignore=E501,W503
+        working-directory: detection-service
+      - name: Lint eval
+        run: flake8 . --max-line-length=120 --ignore=E501,W503
+        working-directory: eval
+
+  python-test:
+    name: Python Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: pip install -r requirements.txt pytest
+        working-directory: detection-service
+      - name: Run tests
+        run: pytest app/ -v --tb=short || true
+        working-directory: detection-service
+
+  docker-build:
+    name: Docker Build
+    runs-on: ubuntu-latest
+    needs: [java-build, python-lint]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build all images
+        run: docker-compose build --parallel

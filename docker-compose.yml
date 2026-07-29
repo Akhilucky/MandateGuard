@@ -57,6 +57,10 @@ services:
     depends_on:
       - feature-service
       - ledger
+    volumes:
+      - model-data:/app/models
+    environment:
+      MODEL_DIR: /app/models
 
   policy-api:
     build: ./policy-api
@@ -79,3 +83,4 @@ services:
 
 volumes:
   pgdata:
+  model-data:

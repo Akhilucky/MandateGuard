@@ -4,8 +4,10 @@ import os
 from sklearn.ensemble import IsolationForest
 from sklearn.preprocessing import StandardScaler
 
-MODEL_PATH = "/tmp/isolation_forest.joblib"
-SCALER_PATH = "/tmp/scaler.joblib"
+MODEL_DIR = os.environ.get("MODEL_DIR", "/app/models")
+MODEL_PATH = os.path.join(MODEL_DIR, "isolation_forest.joblib")
+SCALER_PATH = os.path.join(MODEL_DIR, "scaler.joblib")
+
 
 class MLDetector:
 
@@ -22,6 +24,7 @@ class MLDetector:
             self.trained = True
 
     def _save_model(self):
+        os.makedirs(MODEL_DIR, exist_ok=True)
         joblib.dump(self.model, MODEL_PATH)
         joblib.dump(self.scaler, SCALER_PATH)
 
