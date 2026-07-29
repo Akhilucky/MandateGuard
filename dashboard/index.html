@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MandateGuard Dashboard</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #0f172a; color: #e2e8f0; }
+        .header { background: #1e293b; padding: 16px 24px; border-bottom: 1px solid #334155; display: flex; justify-content: space-between; align-items: center; }
+        .header h1 { font-size: 20px; color: #38bdf8; }
+        .header .status { font-size: 13px; color: #94a3b8; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 24px; }
+        .card { background: #1e293b; border-radius: 8px; border: 1px solid #334155; padding: 20px; }
+        .card h2 { font-size: 14px; color: #94a3b8; text-transform: uppercase; margin-bottom: 12px; }
+        .stat { font-size: 32px; font-weight: bold; color: #38bdf8; }
+        .full-width { grid-column: 1 / -1; }
+        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        th { text-align: left; padding: 8px 12px; color: #94a3b8; border-bottom: 1px solid #334155; }
+        td { padding: 8px 12px; border-bottom: 1px solid #1e293b; }
+        tr:hover { background: #334155; }
+        .risk-critical { color: #ef4444; font-weight: bold; }
+        .risk-high { color: #f97316; font-weight: bold; }
+        .risk-medium { color: #eab308; }
+        .risk-low { color: #22c55e; }
+        #graph-container { width: 100%; height: 400px; position: relative; overflow: hidden; }
+        canvas { display: block; }
+        .controls { display: flex; gap: 8px; margin-bottom: 12px; }
+        .btn { padding: 6px 16px; border: 1px solid #475569; background: #334155; color: #e2e8f0; border-radius: 4px; cursor: pointer; font-size: 13px; }
+        .btn:hover { background: #475569; }
+        .btn.primary { background: #0ea5e9; border-color: #0ea5e9; }
+        .btn.primary:hover { background: #0284c7; }
+        #status-msg { padding: 4px 12px; font-size: 12px; color: #94a3b8; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>MandateGuard</h1>
+        <div class="status">
+            <span id="status-msg">Connecting...</span>
+        </div>
+    </div>
+
+    <div class="grid">
+        <div class="card">
+            <h2>Total Transactions</h2>
+            <div class="stat" id="total-tx">-</div>
+        </div>
+        <div class="card">
+            <h2>Active Alerts</h2>
+            <div class="stat" id="active-alerts" style="color: #ef4444;">-</div>
+        </div>
+        <div class="card">
+            <h2>Agents</h2>
+            <div class="stat" id="total-agents">-</div>
+        </div>
+        <div class="card">
+            <h2>Fraud Rate</h2>
+            <div class="stat" id="fraud-rate" style="color: #f97316;">-</div>
+        </div>
+
+        <div class="card full-width">
+            <h2>Transaction Graph</h2>
+            <div class="controls">
+                <button class="btn primary" onclick="loadGraph()">Refresh Graph</button>
+                <button class="btn" onclick="runSimulation()">Run Simulation</button>
+                <button class="btn" onclick="trainModel()">Train ML Model</button>
+            </div>
+            <div id="graph-container">
+                <canvas id="graph-canvas"></canvas>
+            </div>
+        </div>
+
+        <div class="card full-width">
+            <h2>Recent Alerts</h2>
+            <table>
+                <thead>
+                    <tr><th>Alert ID</th><th>Agent</th><th>Risk Level</th><th>Score</th><th>Reason</th><th>Time</th></tr>
+                </thead>
+                <tbody id="alerts-table"></tbody>
+            </table>
+        </div>
+
+        <div class="card full-width">
+            <h2>Recent Transactions</h2>
+            <table>
+                <thead>
+                    <tr><th>Tx ID</th><th>From</th><th>To</th><th>Amount</th><th>Fraud</th><th>Time</th></tr>
+                </thead>
+                <tbody id="tx-table"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        const API = {
+            ledger: 'http://localhost:8082/ledger',
+            policy: 'http://localhost:8085/api',
+            simulator: 'http://localhost:8081/simulate',
+            detection: 'http://localhost:8084/detect',
+            features: 'http://localhost:8083/features',
+        };
+
+        async function fetchJSON(url) {
+            try {
+                const resp = await fetch(url);
+                if (!resp.ok) return null;
+                return await resp.json();
+            } catch { return null; }
+        }
+
+        async function updateStats() {
+            const stats = await fetchJSON(`${API.ledger}/stats`);
+            if (stats) document.getElementById('total-tx').textContent = stats.totalTransactions.toLocaleString();
+
+            const alerts = await fetchJSON(`${API.policy}/alerts/unresolved`);
+            if (alerts) document.getElementById('active-alerts').textContent = alerts.length;
+
+            document.getElementById('total-agents').textContent = '-';
+            document.getElementById('fraud-rate').textContent = '-';
+            document.getElementById('status-msg').textContent = 'Connected';
+        }
+
+        async function updateAlerts() {
+            const alerts = await fetchJSON(`${API.policy}/alerts?limit=20`);
+            const tbody = document.getElementById('alerts-table');
+            if (!alerts || alerts.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" style="color:#64748b">No alerts</td></tr>';
+                return;
+            }
+            tbody.innerHTML = alerts.map(a => {
+                const cls = a.riskLevel === 'CRITICAL' ? 'risk-critical' : a.riskLevel === 'HIGH' ? 'risk-high' : a.riskLevel === 'MEDIUM' ? 'risk-medium' : 'risk-low';
+                return `<tr>
+                    <td>${a.alertId.substring(0,8)}...</td>
+                    <td>${a.agentId.substring(0,8)}...</td>
+                    <td class="${cls}">${a.riskLevel}</td>
+                    <td>${a.riskScore.toFixed(3)}</td>
+                    <td>${a.reason || '-'}</td>
+                    <td>${new Date(a.createdAt).toLocaleTimeString()}</td>
+                </tr>`;
+            }).join('');
+        }
+
+        async function updateTransactions() {
+            const txs = await fetchJSON(`${API.ledger}/transactions/recent?limit=20`);
+            const tbody = document.getElementById('tx-table');
+            if (!txs || txs.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" style="color:#64748b">No transactions</td></tr>';
+                return;
+            }
+            tbody.innerHTML = txs.map(tx => `<tr>
+                <td>${tx.txId.substring(0,8)}...</td>
+                <td>${tx.fromAgentId.substring(0,8)}...</td>
+                <td>${tx.toAgentId.substring(0,8)}...</td>
+                <td>${parseFloat(tx.amount).toFixed(4)} ${tx.currency}</td>
+                <td style="color:${tx.fraudLabel ? '#ef4444' : '#22c55e'}">${tx.fraudLabel ? 'FRAUD' : 'Normal'}</td>
+                <td>${new Date(tx.timestamp).toLocaleTimeString()}</td>
+            </tr>`).join('');
+        }
+
+        let graphNodes = [];
+        let graphEdges = [];
+
+        async function loadGraph() {
+            const data = await fetchJSON(`${API.features}/graph?window_hours=24`);
+            if (!data) return;
+
+            graphNodes = data.nodes || [];
+            graphEdges = data.edges || [];
+            drawGraph();
+        }
+
+        function drawGraph() {
+            const canvas = document.getElementById('graph-canvas');
+            const container = document.getElementById('graph-container');
+            canvas.width = container.clientWidth;
+            canvas.height = 400;
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            if (graphNodes.length === 0) {
+                ctx.fillStyle = '#64748b';
+                ctx.font = '14px sans-serif';
+                ctx.fillText('No graph data. Run simulation first.', canvas.width / 2 - 120, 200);
+                return;
+            }
+
+            const nodeMap = {};
+            const maxDegree = Math.max(...graphNodes.map(n => n.degree), 1);
+            graphNodes.forEach((n, i) => {
+                const angle = (2 * Math.PI * i) / graphNodes.length;
+                const radius = Math.min(canvas.width, canvas.height) * 0.38;
+                nodeMap[n.id] = {
+                    x: canvas.width / 2 + radius * Math.cos(angle),
+                    y: canvas.height / 2 + radius * Math.sin(angle),
+                    degree: n.degree
+                };
+            });
+
+            ctx.strokeStyle = '#334155';
+            ctx.lineWidth = 0.5;
+            graphEdges.forEach(e => {
+                const from = nodeMap[e.source];
+                const to = nodeMap[e.target];
+                if (from && to) {
+                    ctx.beginPath();
+                    ctx.moveTo(from.x, from.y);
+                    ctx.lineTo(to.x, to.y);
+                    ctx.stroke();
+                }
+            });
+
+            graphNodes.forEach(n => {
+                const pos = nodeMap[n.id];
+                const size = 3 + (n.degree / maxDegree) * 8;
+                ctx.fillStyle = '#38bdf8';
+                ctx.beginPath();
+                ctx.arc(pos.x, pos.y, size, 0, 2 * Math.PI);
+                ctx.fill();
+            });
+        }
+
+        async function runSimulation() {
+            document.getElementById('status-msg').textContent = 'Running simulation...';
+            try {
+                const resp = await fetch(`${API.simulator}/run`, { method: 'POST' });
+                const data = await resp.json();
+                document.getElementById('status-msg').textContent = `Simulated: ${data.totalAgents} agents, ${data.totalTransactions} txs`;
+                updateStats();
+                updateTransactions();
+                loadGraph();
+            } catch (e) {
+                document.getElementById('status-msg').textContent = 'Simulation failed: ' + e.message;
+            }
+        }
+
+        async function trainModel() {
+            document.getElementById('status-msg').textContent = 'Training ML model...';
+            try {
+                const resp = await fetch(`${API.detection}/train`, { method: 'POST' });
+                const data = await resp.json();
+                document.getElementById('status-msg').textContent = `Model trained: ${data.samplesTrained} samples`;
+            } catch (e) {
+                document.getElementById('status-msg').textContent = 'Training failed: ' + e.message;
+            }
+        }
+
+        updateStats();
+        updateAlerts();
+        updateTransactions();
+        loadGraph();
+        setInterval(updateStats, 5000);
+        setInterval(updateAlerts, 10000);
+    </script>
+</body>
+</html>

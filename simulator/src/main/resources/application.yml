@@ -1,0 +1,14 @@
+server:
+  port: 8081
+
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/mandateguard
+    username: mandateguard
+    password: mandateguard
+
+simulator:
+  population-size: 1000
+  time-window-hours: 24
+  fraud-rate: 0.02
+  avg-transactions-per-hour: 5

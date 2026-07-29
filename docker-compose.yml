@@ -1,0 +1,81 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: mandateguard
+      POSTGRES_USER: mandateguard
+      POSTGRES_PASSWORD: mandateguard
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./ledger/src/main/resources/schema.sql:/docker-entrypoint-initdb.d/01-ledger.sql
+      - ./policy-api/src/main/resources/schema.sql:/docker-entrypoint-initdb.d/02-policy.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mandateguard"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  simulator:
+    build: ./simulator
+    ports:
+      - "8081:8081"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/mandateguard
+      SPRING_DATASOURCE_USERNAME: mandateguard
+      SPRING_DATASOURCE_PASSWORD: mandateguard
+
+  ledger:
+    build: ./ledger
+    ports:
+      - "8082:8082"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/mandateguard
+      SPRING_DATASOURCE_USERNAME: mandateguard
+      SPRING_DATASOURCE_PASSWORD: mandateguard
+
+  feature-service:
+    build: ./feature-service
+    ports:
+      - "8083:8083"
+    depends_on:
+      - ledger
+
+  detection-service:
+    build: ./detection-service
+    ports:
+      - "8084:8084"
+    depends_on:
+      - feature-service
+      - ledger
+
+  policy-api:
+    build: ./policy-api
+    ports:
+      - "8085:8085"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/mandateguard
+      SPRING_DATASOURCE_USERNAME: mandateguard
+      SPRING_DATASOURCE_PASSWORD: mandateguard
+
+  dashboard:
+    image: nginx:alpine
+    ports:
+      - "3000:80"
+    volumes:
+      - ./dashboard:/usr/share/nginx/html:ro
+
+volumes:
+  pgdata:
