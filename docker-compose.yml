@@ -73,11 +73,9 @@ services:
       SPRING_DATASOURCE_PASSWORD: mandateguard
 
   dashboard:
-    image: nginx:alpine
+    build: ./dashboard
     ports:
       - "3000:80"
-    volumes:
-      - ./dashboard:/usr/share/nginx/html:ro
 
 volumes:
   pgdata:
